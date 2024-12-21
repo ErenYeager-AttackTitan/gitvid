@@ -12,7 +12,7 @@
     "fluent-ffmpeg": "^2.1.2"
   },
   "engines": {
-    "node": "14.x"
+    "node": "18.x"
   },
   "author": "",
   "license": "ISC"
