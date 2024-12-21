@@ -1,22 +1,47 @@
-const express = require('express');
-const axios = require('axios');
-const app = express();
-const port = process.env.PORT || 3000;
+const http = require('http');
+const https = require('https');
+const url = require('url');
 
-// Endpoint to serve the M3U playlist
-app.get('/stream.m3u8', async (req, res) => {
-    try {
-        const m3uUrl = 'https://raw.githubusercontent.com/ErenYeager-AttackTitan/gitvid/refs/heads/main/3.m3u'; // Replace with your M3U file
-        const response = await axios.get(m3uUrl);
-        res.set('Content-Type', 'application/vnd.apple.mpegurl');
-        res.send(response.data);  // Directly serve the playlist file
-    } catch (error) {
-        console.error('Error fetching M3U playlist:', error);
-        res.status(500).send('Error fetching the playlist');
-    }
+// Helper function to stream content from a given URL
+function streamContent(targetUrl, clientResponse) {
+  const parsedUrl = url.parse(targetUrl);
+  const protocol = parsedUrl.protocol === 'https:' ? https : http;
+
+  protocol
+    .get(targetUrl, (res) => {
+      if (res.statusCode === 200) {
+        // Pipe the response directly to the client
+        clientResponse.writeHead(200, {
+          'Content-Type': res.headers['content-type'],
+          'Content-Length': res.headers['content-length'],
+        });
+        res.pipe(clientResponse);
+      } else {
+        clientResponse.writeHead(res.statusCode);
+        clientResponse.end(`Error: ${res.statusCode}`);
+      }
+    })
+    .on('error', (err) => {
+      console.error('Error fetching URL:', err.message);
+      clientResponse.writeHead(500);
+      clientResponse.end('Internal Server Error');
+    });
+}
+
+// Create an HTTP server
+const server = http.createServer((req, res) => {
+  const queryUrl = new URL(req.url, `http://${req.headers.host}`).searchParams.get('url');
+  if (queryUrl) {
+    console.log(`Streaming: ${queryUrl}`);
+    streamContent(queryUrl, res);
+  } else {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('Bad Request: Missing "url" query parameter');
+  }
 });
 
 // Start the server
-app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
+const PORT = 3000;
+server.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
 });
