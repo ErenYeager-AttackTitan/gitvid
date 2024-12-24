@@ -1,31 +1,44 @@
 const express = require('express');
 const ffmpeg = require('fluent-ffmpeg');
+const fs = require('fs');
+const path = require('path');
 const app = express();
 const port = 3000;
 
-// Video URL to stream
-const videoUrl = 'http://188.165.53.164/vidshd/56ea912c4df934c216c352fa8d623af3/3108.mp4';
+// Path to the local video file
+const videoPath = path.join(__dirname, 'Tokyo Ghoul - S1 - NCOP1 (10).mp4');
 
-// Set up the route to stream the video
+// Set up the route to stream the local video file
 app.get('/stream', (req, res) => {
-    res.contentType('video/mp4'); // Set the content type to video/mp4
+    const stat = fs.statSync(videoPath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
 
-    // Use ffmpeg to stream the video
-    ffmpeg(videoUrl)
-        .format('mp4')
-        .videoCodec('libx264')
-        .audioCodec('aac')
-        .on('start', () => {
-            console.log('FFmpeg started streaming');
-        })
-        .on('end', () => {
-            console.log('FFmpeg finished streaming');
-        })
-        .on('error', (err) => {
-            console.error('Error:', err);
-            res.status(500).send('Error streaming the video');
-        })
-        .pipe(res, { end: true }); // Pipe the output directly to the response
+    if (range) {
+        const parts = range.replace(/bytes=/, "").split("-");
+
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize-1;
+
+        const chunkSize = (end-start)+1;
+        const file = fs.createReadStream(videoPath, { start, end });
+
+        res.writeHead(206, {
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': chunkSize,
+            'Content-Type': 'video/mp4',
+        });
+
+        file.pipe(res);
+    } else {
+        res.writeHead(200, {
+            'Content-Length': fileSize,
+            'Content-Type': 'video/mp4',
+        });
+
+        fs.createReadStream(videoPath).pipe(res);
+    }
 });
 
 // Start the server
