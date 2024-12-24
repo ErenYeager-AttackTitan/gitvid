@@ -1,47 +1,34 @@
-const http = require('http');
-const https = require('https');
-const url = require('url');
+const express = require('express');
+const ffmpeg = require('fluent-ffmpeg');
+const app = express();
+const port = 3000;
 
-// Helper function to stream content from a given URL
-function streamContent(targetUrl, clientResponse) {
-  const parsedUrl = url.parse(targetUrl);
-  const protocol = parsedUrl.protocol === 'https:' ? https : http;
+// Video URL to stream
+const videoUrl = 'http://188.165.53.164/vidshd/56ea912c4df934c216c352fa8d623af3/3108.mp4';
 
-  protocol
-    .get(targetUrl, (res) => {
-      if (res.statusCode === 200) {
-        // Pipe the response directly to the client
-        clientResponse.writeHead(200, {
-          'Content-Type': res.headers['content-type'],
-          'Content-Length': res.headers['content-length'],
-        });
-        res.pipe(clientResponse);
-      } else {
-        clientResponse.writeHead(res.statusCode);
-        clientResponse.end(`Error: ${res.statusCode}`);
-      }
-    })
-    .on('error', (err) => {
-      console.error('Error fetching URL:', err.message);
-      clientResponse.writeHead(500);
-      clientResponse.end('Internal Server Error');
-    });
-}
+// Set up the route to stream the video
+app.get('/stream', (req, res) => {
+    res.contentType('video/mp4'); // Set the content type to video/mp4
 
-// Create an HTTP server
-const server = http.createServer((req, res) => {
-  const queryUrl = new URL(req.url, `http://${req.headers.host}`).searchParams.get('url');
-  if (queryUrl) {
-    console.log(`Streaming: ${queryUrl}`);
-    streamContent(queryUrl, res);
-  } else {
-    res.writeHead(400, { 'Content-Type': 'text/plain' });
-    res.end('Bad Request: Missing "url" query parameter');
-  }
+    // Use ffmpeg to stream the video
+    ffmpeg(videoUrl)
+        .format('mp4')
+        .videoCodec('libx264')
+        .audioCodec('aac')
+        .on('start', () => {
+            console.log('FFmpeg started streaming');
+        })
+        .on('end', () => {
+            console.log('FFmpeg finished streaming');
+        })
+        .on('error', (err) => {
+            console.error('Error:', err);
+            res.status(500).send('Error streaming the video');
+        })
+        .pipe(res, { end: true }); // Pipe the output directly to the response
 });
 
 // Start the server
-const PORT = 3000;
-server.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+app.listen(port, () => {
+    console.log(`IPTV server is running at http://localhost:${port}`);
 });
